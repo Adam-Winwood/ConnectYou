@@ -6,6 +6,7 @@ import android.annotation.SuppressLint
 import android.content.ContentProviderOperation
 import android.content.ContentResolver
 import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -31,6 +32,7 @@ import com.bnyro.contacts.domain.model.ContactsGroup
 import com.bnyro.contacts.domain.model.ValueWithType
 import com.bnyro.contacts.util.ContactsHelper
 import com.bnyro.contacts.util.ImageHelper
+import com.bnyro.contacts.util.PermissionHelper
 import com.bnyro.contacts.util.Preferences
 import com.bnyro.contacts.util.extension.boolValue
 import com.bnyro.contacts.util.extension.intValue
@@ -448,6 +450,60 @@ class DeviceContactsRepository(private val context: Context) : ContactsRepositor
         }
 
         return listOf(AccountType.androidDefault) + accounts.map { AccountType(it.name, it.type) }
+    }
+
+    /**
+     * Before the fix for #477, contacts/groups were created with AccountType.androidDefault
+     * (a UI-only "Device" sentinel) written as their literal account_type/account_name, as if
+     * it were a real account. ContactsProvider2 reconciles raw_contacts/data/groups against the
+     * real current account list on every account-list change anywhere on the device (any
+     * account, any type, add or remove) and deletes rows whose account no longer exists - since
+     * this sentinel never was a real account, every contact/group created this way was
+     * permanently exposed to that cleanup. This moves any such existing rows to the real
+     * local-contact convention (account_type=null, account_name=null) one time.
+     *
+     * Only runs if no real AccountManager account currently matches the sentinel's exact
+     * (type, name) - if one exists, this is a no-op, since there would be no way to tell which
+     * rows are ours vs. genuinely belonging to that real account. The flag is only set once a
+     * migration attempt actually completes (with permission and without a colliding real
+     * account), so an ambiguous or permission-denied run will naturally retry on a later launch.
+     */
+    suspend fun migrateLegacyLocalAccountContacts() = withContext(Dispatchers.IO) {
+        if (Preferences.getBoolean(Preferences.legacyLocalAccountMigratedKey, false)) return@withContext
+        if (!PermissionHelper.hasPermission(
+                context,
+                Manifest.permission.READ_CONTACTS,
+                Manifest.permission.WRITE_CONTACTS
+            )
+        ) {
+            return@withContext
+        }
+
+        val sentinelType = AccountType.androidDefault.type
+        val sentinelName = AccountType.androidDefault.name
+        val realAccountExists = AccountManager.get(context).accounts.any {
+            it.type == sentinelType && it.name == sentinelName
+        }
+        if (realAccountExists) return@withContext
+
+        runCatching {
+            val selection = "${RawContacts.ACCOUNT_TYPE} = ? AND ${RawContacts.ACCOUNT_NAME} = ?"
+            val selectionArgs = arrayOf(sentinelType, sentinelName)
+            val nullAccountValues = ContentValues().apply {
+                putNull(RawContacts.ACCOUNT_TYPE)
+                putNull(RawContacts.ACCOUNT_NAME)
+            }
+
+            context.contentResolver.update(RawContacts.CONTENT_URI, nullAccountValues, selection, selectionArgs)
+            context.contentResolver.update(
+                ContactsContract.Groups.CONTENT_URI,
+                nullAccountValues,
+                selection,
+                selectionArgs
+            )
+        }
+
+        Preferences.edit { putBoolean(Preferences.legacyLocalAccountMigratedKey, true) }
     }
 
     private fun getCreateAction(

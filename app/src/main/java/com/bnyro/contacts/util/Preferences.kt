@@ -31,6 +31,7 @@ object Preferences {
     const val encryptBackupPasswordKey = "encryptBackupsPassword"
     const val storeSmsLocallyKey = "storeSmsLocally"
     const val lastChosenAccount = "lastChosenAccount"
+    const val legacyLocalAccountMigratedKey = "legacyLocalAccountMigrated"
     const val biometricAuthKey = "biometricAuth"
     const val favoritesOnlyKey = "favoritesOnly"
     const val selectedSimSubscriptionIdKey = "selectedSimSubscriptionId"
