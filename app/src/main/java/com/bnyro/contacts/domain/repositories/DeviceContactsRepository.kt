@@ -170,8 +170,10 @@ class DeviceContactsRepository(private val context: Context) : ContactsRepositor
             ContentProviderOperation.newInsert(ContactsContract.Groups.CONTENT_URI).apply {
                 withValue(ContactsContract.Groups.TITLE, groupName)
                 withValue(ContactsContract.Groups.GROUP_VISIBLE, 1)
-                withValue(ContactsContract.Groups.ACCOUNT_NAME, AccountType.androidDefault.name)
-                withValue(ContactsContract.Groups.ACCOUNT_TYPE, AccountType.androidDefault.type)
+                // see the comment in createContact() - a group needs a real null account too,
+                // not the "Device" UI sentinel, or it's vulnerable to the same cleanup
+                withValue(ContactsContract.Groups.ACCOUNT_NAME, null as String?)
+                withValue(ContactsContract.Groups.ACCOUNT_TYPE, null as String?)
                 operations.add(build())
             }
 
@@ -309,10 +311,18 @@ class DeviceContactsRepository(private val context: Context) : ContactsRepositor
     override suspend fun createContact(contact: ContactData) {
         withContext(Dispatchers.IO) {
             val lastChosenAccount = Preferences.getLastChosenAccount()
+            val resolvedAccountType = contact.accountType ?: lastChosenAccount.type
+            val resolvedAccountName = contact.accountName ?: lastChosenAccount.name
+            // the local/"Device" account is a UI-only sentinel, not a real registered
+            // AccountManager account - writing it as a literal account_type/account_name
+            // makes ContactsProvider2 treat these raw contacts as belonging to an account
+            // that doesn't exist, so any unrelated account being added/removed anywhere on
+            // the device wipes them. null/null is Android's actual local-contact convention.
+            val isLocalAccount = resolvedAccountType == AccountType.androidDefault.type
             val ops = listOfNotNull(
                 getCreateAction(
-                    contact.accountType ?: lastChosenAccount.type,
-                    contact.accountName ?: lastChosenAccount.name
+                    if (isLocalAccount) null else resolvedAccountType,
+                    if (isLocalAccount) null else resolvedAccountName
                 ),
                 getInsertAction(
                     StructuredName.CONTENT_ITEM_TYPE,
@@ -441,8 +451,8 @@ class DeviceContactsRepository(private val context: Context) : ContactsRepositor
     }
 
     private fun getCreateAction(
-        accountType: String,
-        accountName: String
+        accountType: String?,
+        accountName: String?
     ): ContentProviderOperation {
         return ContentProviderOperation.newInsert(RawContacts.CONTENT_URI)
             .withValue(RawContacts.ACCOUNT_TYPE, accountType)
