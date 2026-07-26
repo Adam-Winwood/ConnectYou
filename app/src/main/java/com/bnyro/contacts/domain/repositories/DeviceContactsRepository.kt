@@ -28,6 +28,8 @@ import com.bnyro.contacts.domain.enums.StringAttribute
 import com.bnyro.contacts.domain.model.AccountType
 import com.bnyro.contacts.domain.model.ContactData
 import com.bnyro.contacts.domain.model.ContactsGroup
+import com.bnyro.contacts.domain.model.DeviceAccountType
+import com.bnyro.contacts.domain.model.RealAccountType
 import com.bnyro.contacts.domain.model.ValueWithType
 import com.bnyro.contacts.util.ContactsHelper
 import com.bnyro.contacts.util.ImageHelper
@@ -98,8 +100,10 @@ class DeviceContactsRepository(private val context: Context) : ContactsRepositor
                     val contact = ContactData(
                         rawContactId = it.intValue(Data.RAW_CONTACT_ID) ?: 0,
                         contactId = contactId,
-                        accountType = it.stringValue(RawContacts.ACCOUNT_TYPE),
-                        accountName = it.stringValue(RawContacts.ACCOUNT_NAME),
+                        account = AccountType.fromAccountColumns(
+                            accountName = it.stringValue(RawContacts.ACCOUNT_NAME),
+                            accountType = it.stringValue(RawContacts.ACCOUNT_TYPE),
+                        ),
                         displayName = displayName,
                         alternativeName = alternativeName,
                         firstName = firstName,
@@ -167,11 +171,12 @@ class DeviceContactsRepository(private val context: Context) : ContactsRepositor
     override suspend fun createGroup(groupName: String): ContactsGroup? {
         return withContext(Dispatchers.IO) {
             val operations = ArrayList<ContentProviderOperation>()
+            val (accountName, accountType) = DeviceAccountType.toAccountColumns()
             ContentProviderOperation.newInsert(ContactsContract.Groups.CONTENT_URI).apply {
                 withValue(ContactsContract.Groups.TITLE, groupName)
                 withValue(ContactsContract.Groups.GROUP_VISIBLE, 1)
-                withValue(ContactsContract.Groups.ACCOUNT_NAME, AccountType.androidDefault.name)
-                withValue(ContactsContract.Groups.ACCOUNT_TYPE, AccountType.androidDefault.type)
+                withValue(ContactsContract.Groups.ACCOUNT_NAME, accountName)
+                withValue(ContactsContract.Groups.ACCOUNT_TYPE, accountType)
                 operations.add(build())
             }
 
@@ -311,8 +316,7 @@ class DeviceContactsRepository(private val context: Context) : ContactsRepositor
             val lastChosenAccount = Preferences.getLastChosenAccount()
             val ops = listOfNotNull(
                 getCreateAction(
-                    contact.accountType ?: lastChosenAccount.type,
-                    contact.accountName ?: lastChosenAccount.name
+                    contact.account ?: lastChosenAccount
                 ),
                 getInsertAction(
                     StructuredName.CONTENT_ITEM_TYPE,
@@ -437,13 +441,15 @@ class DeviceContactsRepository(private val context: Context) : ContactsRepositor
                     && ContentResolver.getSyncAutomatically(it, AUTHORITY)
         }
 
-        return listOf(AccountType.androidDefault) + accounts.map { AccountType(it.name, it.type) }
+        return listOf<AccountType>(DeviceAccountType) + accounts.map {
+            RealAccountType(it.name, it.type)
+        }
     }
 
     private fun getCreateAction(
-        accountType: String,
-        accountName: String
+        account: AccountType
     ): ContentProviderOperation {
+        val (accountName, accountType) = account.toAccountColumns()
         return ContentProviderOperation.newInsert(RawContacts.CONTENT_URI)
             .withValue(RawContacts.ACCOUNT_TYPE, accountType)
             .withValue(RawContacts.ACCOUNT_NAME, accountName)
