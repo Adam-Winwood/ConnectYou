@@ -6,10 +6,12 @@ import android.annotation.SuppressLint
 import android.content.ContentProviderOperation
 import android.content.ContentResolver
 import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import android.provider.ContactsContract
 import android.provider.ContactsContract.AUTHORITY
 import android.provider.ContactsContract.CALLER_IS_SYNCADAPTER
@@ -20,6 +22,7 @@ import android.provider.ContactsContract.CommonDataKinds.StructuredName
 import android.provider.ContactsContract.Contacts
 import android.provider.ContactsContract.Data
 import android.provider.ContactsContract.RawContacts
+import android.util.Log
 import androidx.annotation.RequiresPermission
 import com.bnyro.contacts.R
 import com.bnyro.contacts.domain.enums.BackupType
@@ -33,6 +36,7 @@ import com.bnyro.contacts.domain.model.RealAccountType
 import com.bnyro.contacts.domain.model.ValueWithType
 import com.bnyro.contacts.util.ContactsHelper
 import com.bnyro.contacts.util.ImageHelper
+import com.bnyro.contacts.util.PermissionHelper
 import com.bnyro.contacts.util.Preferences
 import com.bnyro.contacts.util.extension.boolValue
 import com.bnyro.contacts.util.extension.intValue
@@ -593,6 +597,83 @@ class DeviceContactsRepository(private val context: Context) : ContactsRepositor
 
             contentResolver.applyBatch(AUTHORITY, arrayListOf(op))
         }
+
+    fun migrateContactsFromLegacyDeviceAccount() {
+        val alreadyMigrated = Preferences.getBoolean(
+            Preferences.legacyDeviceAccountsMigratedKey,
+            false
+        )
+
+        if (!alreadyMigrated
+            && hasPermissionReadWriteContacts()
+            && isLegacyAccountAFakeAccount()
+        ) {
+            runMigration()
+
+            Preferences.edit {
+                putBoolean(
+                    Preferences.legacyDeviceAccountsMigratedKey,
+                    true
+                )
+            }
+        }
+    }
+
+    private fun runMigration() {
+        try {
+            clearLegacyAccountColumns()
+        } catch (error: IllegalArgumentException) {
+            /* At least one version of Samsung Android throws
+             * IllegalArgumentException("Must specify both or neither of ACCOUNT_NAME and ACCOUNT_TYPE")
+             * if you pass in null for both values (despite this being the mentioned "neither" case).
+             */
+            Log.e(
+                "LegacyContactsMigration",
+                "In-place update of contacts with the legacy account values failed. Manufacturer: ${Build.MANUFACTURER}, Model: ${Build.MODEL}",
+                error
+            )
+        }
+    }
+
+    private fun hasPermissionReadWriteContacts(): Boolean {
+        return PermissionHelper.hasPermission(
+            context,
+            Manifest.permission.READ_CONTACTS,
+            Manifest.permission.WRITE_CONTACTS,
+        )
+    }
+
+    private fun isLegacyAccountAFakeAccount(): Boolean {
+        return AccountManager.get(context).accounts.none {
+            it.name == DeviceAccountType.LEGACY_NAME
+                    && it.type == DeviceAccountType.LEGACY_TYPE
+        }
+    }
+
+    private fun clearLegacyAccountColumns() {
+        val values = ContentValues().apply {
+            putNull(RawContacts.ACCOUNT_NAME)
+            putNull(RawContacts.ACCOUNT_TYPE)
+        }
+
+        val selection =
+            "${RawContacts.ACCOUNT_NAME} = ? AND ${RawContacts.ACCOUNT_TYPE} = ?"
+        val selectionArgs =
+            arrayOf(DeviceAccountType.LEGACY_NAME, DeviceAccountType.LEGACY_TYPE)
+
+        contentResolver.update(
+            RawContacts.CONTENT_URI,
+            values,
+            selection,
+            selectionArgs
+        )
+        contentResolver.update(
+            ContactsContract.Groups.CONTENT_URI,
+            values,
+            selection,
+            selectionArgs
+        )
+    }
 
     companion object {
         const val MAX_PHOTO_SIZE = 700f
