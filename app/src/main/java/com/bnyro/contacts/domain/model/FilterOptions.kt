@@ -4,7 +4,7 @@ import com.bnyro.contacts.domain.enums.SortOrder
 import com.bnyro.contacts.util.Preferences
 
 data class FilterOptions(
-    var sortOder: SortOrder,
+    var sortOrder: SortOrder,
     var hiddenAccountIdentifiers: List<String>,
     var visibleGroups: List<ContactsGroup>,
     var favoritesOnly: Boolean

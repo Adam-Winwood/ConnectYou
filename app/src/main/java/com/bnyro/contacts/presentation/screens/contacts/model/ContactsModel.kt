@@ -18,6 +18,7 @@ import com.bnyro.contacts.R
 import com.bnyro.contacts.domain.enums.ContactsSource
 import com.bnyro.contacts.domain.model.AccountType
 import com.bnyro.contacts.domain.model.ContactData
+import com.bnyro.contacts.domain.model.FilterOptions
 import com.bnyro.contacts.domain.repositories.ContactsRepository
 import com.bnyro.contacts.domain.repositories.DeviceContactsRepository
 import com.bnyro.contacts.domain.repositories.LocalContactsRepository
@@ -225,6 +226,20 @@ class ContactsModel(
     fun updateContactRingTone(contact: ContactData, uri: Uri) {
         viewModelScope.launch {
             deviceContactsRepository.updateContactRingTone(contact.contactId.toString(), uri)
+        }
+    }
+
+    fun getContactsFilteredByOptions(filterOptions: FilterOptions): List<ContactData> {
+        return contacts.filter {
+            !filterOptions.hiddenAccountIdentifiers.contains(it.accountIdentifier)
+        }.filter {
+            filterOptions.visibleGroups.isEmpty() || filterOptions.visibleGroups.any { group ->
+                it.groups.contains(group)
+            }
+        }.filter {
+            !filterOptions.favoritesOnly || it.favorite
+        }.sortedBy {
+            it.getNameBySortOrder(filterOptions.sortOrder)
         }
     }
 

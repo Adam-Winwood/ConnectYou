@@ -94,6 +94,10 @@ fun ContactsPage(
         mutableStateOf(FilterOptions.default())
     }
 
+    val visibleContacts = remember(viewModel.contacts, filterOptions) {
+        viewModel.getContactsFilteredByOptions(filterOptions)
+    }
+
     var showSearch by rememberSaveable {
         mutableStateOf(false)
     }
@@ -237,13 +241,13 @@ fun ContactsPage(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Checkbox(
-                                        checked = selectedContacts.containsAll(viewModel.contacts),
+                                        checked = selectedContacts.containsAll(visibleContacts),
                                         onCheckedChange = {
-                                            if (selectedContacts.containsAll(viewModel.contacts)) {
+                                            if (selectedContacts.containsAll(visibleContacts)) {
                                                 selectedContacts.clear()
                                             } else {
                                                 selectedContacts.clear()
-                                                selectedContacts.addAll(viewModel.contacts)
+                                                selectedContacts.addAll(visibleContacts)
                                             }
                                         }
                                     )
@@ -297,7 +301,7 @@ fun ContactsPage(
                 .padding(top = pV.calculateTopPadding())
                 .fillMaxSize()
         ) {
-            when (val contactState = viewModel.contactsStateObserver.value) {
+            when (viewModel.contactsStateObserver.value) {
                 ContactListState.Loading -> {
                     Box(
                         modifier = Modifier.fillMaxSize()
@@ -314,15 +318,15 @@ fun ContactsPage(
 
                 is ContactListState.Success -> {
                     ContactsList(
-                        contacts = contactState.contacts,
-                        filterOptions = filterOptions,
+                        contacts = visibleContacts,
+                        sortOrder = filterOptions.sortOrder,
                         scrollConnection = scrollConnection,
                         selectedContacts = selectedContacts
                     )
                     if (showSearch) {
                         ContactSearchScreen(
-                            contacts = contactState.contacts,
-                            filterOptions = filterOptions,
+                            contacts = visibleContacts,
+                            sortOrder = filterOptions.sortOrder,
                             onDismissRequest = { showSearch = false }
                         )
                     }
@@ -365,7 +369,7 @@ fun ContactsPage(
             },
             onFilterChanged = {
                 Preferences.edit {
-                    putInt(Preferences.sortOrderKey, it.sortOder.ordinal)
+                    putInt(Preferences.sortOrderKey, it.sortOrder.ordinal)
                     putStringSet(Preferences.hiddenAccountsKey, it.hiddenAccountIdentifiers.toSet())
                     putBoolean(Preferences.favoritesOnlyKey, it.favoritesOnly)
                 }

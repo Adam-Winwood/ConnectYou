@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
+import com.bnyro.contacts.domain.enums.SortOrder
 import com.bnyro.contacts.domain.model.ContactData
 import com.bnyro.contacts.domain.model.FilterOptions
 import com.bnyro.contacts.presentation.components.CharacterHeader
@@ -24,24 +25,14 @@ import my.nanihadesuka.compose.ScrollbarSettings
 @Composable
 fun ContactsList(
     contacts: List<ContactData>,
-    filterOptions: FilterOptions,
+    sortOrder: SortOrder,
     scrollConnection: NestedScrollConnection?,
     selectedContacts: MutableList<ContactData>
 ) {
     val state = rememberLazyListState()
-    val contactGroups = remember(contacts, filterOptions) {
-        contacts.asSequence().filter {
-            !filterOptions.hiddenAccountIdentifiers.contains(it.accountIdentifier)
-        }.filter {
-            filterOptions.visibleGroups.isEmpty() || filterOptions.visibleGroups.any { group ->
-                it.groups.contains(group)
-            }
-        }.filter {
-            !filterOptions.favoritesOnly || it.favorite
-        }.sortedBy {
-            it.getNameBySortOrder(filterOptions.sortOder)
-        }.groupBy {
-            it.getNameBySortOrder(filterOptions.sortOder)?.firstOrNull()?.uppercase()
+    val contactGroups = remember(contacts, sortOrder) {
+        contacts.groupBy {
+            it.getNameBySortOrder(sortOrder)?.firstOrNull()?.uppercase()
         }
     }
     LazyColumnScrollbar(
@@ -69,7 +60,7 @@ fun ContactsList(
                     ContactItem(
                         modifier = Modifier.padding(horizontal = 10.dp),
                         contact = it,
-                        sortOrder = filterOptions.sortOder,
+                        sortOrder = sortOrder,
                         selected = selectedContacts.contains(it),
                         onSinglePress = {
                             if (selectedContacts.isEmpty()) {

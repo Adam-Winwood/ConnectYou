@@ -34,7 +34,7 @@ fun FilterDialog(
     onFilterChanged: (FilterOptions) -> Unit
 ) {
     var sortOrder by remember {
-        mutableStateOf(initialFilters.sortOder)
+        mutableStateOf(initialFilters.sortOrder)
     }
 
     var hiddenAccountNames by remember {

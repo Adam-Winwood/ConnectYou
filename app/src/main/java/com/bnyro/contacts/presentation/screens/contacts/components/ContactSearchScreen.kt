@@ -19,8 +19,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.bnyro.contacts.R
+import com.bnyro.contacts.domain.enums.SortOrder
 import com.bnyro.contacts.domain.model.ContactData
-import com.bnyro.contacts.domain.model.FilterOptions
 import com.bnyro.contacts.presentation.components.ElevatedTextInputField
 import com.bnyro.contacts.presentation.components.FullScreenDialog
 import com.bnyro.contacts.util.ContactsHelper
@@ -31,7 +31,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun ContactSearchScreen(
     contacts: List<ContactData>,
-    filterOptions: FilterOptions,
+    sortOrder: SortOrder,
     onDismissRequest: () -> Unit
 ) {
     FullScreenDialog(onDismissRequest) {
@@ -77,7 +77,7 @@ fun ContactSearchScreen(
                 )
                 ContactsList(
                     contacts = visibleContacts,
-                    filterOptions = filterOptions,
+                    sortOrder = sortOrder,
                     scrollConnection = null,
                     selectedContacts = emptyList<ContactData>().toMutableList()
                 )
